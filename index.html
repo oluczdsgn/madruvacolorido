@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerador de Paletas de Cores - Bento UI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        /* Estilos gerais e reset */
+        :root {
+            --background-color: #0A0A0A;
+            --glass-bg: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --text-color: #EAEAEA;
+            --text-muted-color: #A0A0A0;
+            --glow-color: hsla(277, 98%, 79%, 0.2);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            padding-top: 6rem; /* Espaço para o menu fixo */
+            padding-left: 1rem;
+            padding-right: 1rem;
+            padding-bottom: 1rem;
+            min-height: 100vh;
+            background-image: radial-gradient(circle at 1px 1px, rgba(255,255,255,0.05) 1px, transparent 0);
+            background-size: 20px 20px;
+            overflow: hidden;
+        }
+
+        /* Efeitos de Fundo e Mouse */
+        #background-glow {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            width: 1200px;
+            height: 1200px;
+            background: radial-gradient(circle, var(--glow-color) 0%, transparent 60%);
+            transform: translate(-50%, -50%);
+            transition: background 1s ease;
+            z-index: -2;
+        }
+
+        #mouse-pointer-glow {
+            position: fixed;
+            width: 400px;
+            height: 400px;
+            background: radial-gradient(circle, var(--glow-color) 0%, transparent 70%);
+            border-radius: 50%;
+            pointer-events: none;
+            transform: translate(-50%, -50%);
+            transition: background 1s ease, opacity 0.2s ease;
+            z-index: -1;
+            filter: blur(20px);
+            opacity: 0.5; /* Opacidade ajustada para 50% */
+        }
+
+        /* Menu de Navegação Superior */
+        .top-nav {
+            position: fixed;
+            top: 1.5rem;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 1.5rem;
+            padding: 0.5rem;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .nav-btn {
+            background: transparent;
+            color: var(--text-muted-color);
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 1.25rem;
+            cursor: pointer;
+            font-family: 'Inter', sans-serif;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .nav-btn:hover {
+            color: var(--text-color);
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .nav-btn.active {
+            color: var(--text-color);
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        /* Container de Página */
+        .page {
+            display: none; /* Oculto por padrão */
+            height: calc(100vh - 7rem);
+            overflow-y: auto;
+            padding-right: 10px;
+        }
+        .page.active {
+            display: block; /* Visível quando ativo */
+        }
+        
+        /* Layout Bento Grid */
+        .bento-grid {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            grid-template-rows: auto;
+            gap: 1rem;
+            width: 100%;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        /* Custom Scrollbar */
+        .page::-webkit-scrollbar { width: 6px; }
+        .page::-webkit-scrollbar-track { background: transparent; }
+        .page::-webkit-scrollbar-thumb { background-color: rgba(255, 255, 255, 0.2); border-radius: 10px; }
+
+        .bento-box {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 1.5rem;
+            padding: 1.5rem;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .bento-box:hover {
+            transform: translateY(-5px) scale(1.01);
+            border-color: rgba(255, 255, 255, 0.25);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Header */
+        .page-header { grid-column: span 12; text-align: center; margin-bottom: 1rem; }
+        .page-header h1 { font-size: 2.5rem; font-weight: 700; letter-spacing: -1px; background: linear-gradient(90deg, #EAEAEA, #A0A0A0); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .category-header { grid-column: span 12; margin-top: 2rem; margin-bottom: 1rem; border-bottom: 1px solid var(--glass-border); padding-bottom: 0.5rem; }
+        .category-header h2 { font-weight: 500; }
+
+        /* Seletor de Cor (Canvas) */
+        #picker-box { grid-column: span 12; grid-row: span 2; align-items: center; gap: 1.5rem; }
+        .picker-container { width: 100%; display: flex; gap: 1.5rem; flex-wrap: wrap; justify-content: center; }
+        #color-canvas { width: 100%; max-width: 400px; height: 200px; cursor: crosshair; border-radius: 1rem; }
+        .color-preview-wrapper { display: flex; flex-direction: column; align-items: center; gap: 1rem; }
+        #color-preview { width: 80px; height: 80px; border-radius: 1rem; border: 2px solid var(--glass-border); }
+        #color-value { font-family: 'monospace'; font-size: 1.1rem; background-color: rgba(0,0,0,0.2); padding: 0.5rem 1rem; border-radius: 0.5rem; }
+
+        /* Seções de paleta */
+        .palette-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 0.5rem; }
+        .palette-header h2 { font-size: 1.2rem; font-weight: 500; margin-right: auto; }
+        .action-buttons { display: flex; gap: 0.5rem; }
+        .action-btn { background: rgba(255, 255, 255, 0.1); color: var(--text-color); border: none; padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer; font-size: 0.8rem; font-family: 'Inter', sans-serif; transition: all 0.2s ease; }
+        .action-btn:hover { background: rgba(255, 255, 255, 0.2); transform: translateY(-2px); }
+        .action-btn:active { transform: translateY(0px) scale(0.98); }
+
+        .palette { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.75rem; }
+        .color-box { width: 100%; padding-bottom: 100%; border-radius: 0.75rem; cursor: pointer; transition: transform 0.2s ease; position: relative; }
+        .color-box-inner { position: absolute; top: 0; left: 0; right: 0; bottom: 0; border-radius: inherit; }
+        .color-box:hover { transform: scale(1.08); }
+        
+        /* Seção de Degradê Aprimorada */
+        #gradient-palette-display { width: 100%; height: 120px; border-radius: 1rem; margin-bottom: 1.5rem; transition: background 0.5s ease; }
+        .gradient-suggestions-container { display: flex; justify-content: center; gap: 1rem; margin-top: auto; }
+        .gradient-suggestion { width: 30px; height: 30px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; transition: all 0.2s ease; background-size: cover; background-color: transparent; }
+        .gradient-suggestion.active { border-color: var(--text-color); transform: scale(1.15); }
+        
+        /* Posicionamento no Grid (Gerador) */
+        #generator-page .bento-grid #header-box { grid-column: span 12; }
+        #generator-page .bento-grid #harmonizing-section { grid-column: span 12; }
+        #generator-page .bento-grid #gradient-section { grid-column: span 12; }
+        #generator-page .bento-grid #pastel-section { grid-column: span 4; }
+        #generator-page .bento-grid #dark-section { grid-column: span 4; }
+        #generator-page .bento-grid #neon-section { grid-column: span 4; }
+
+        /* Estilos para páginas de sugestões */
+        .premade-palette-box { grid-column: span 6; }
+        .premade-palette { display: flex; height: 80px; border-radius: 1rem; overflow: hidden; margin-top: 1rem; }
+        .premade-color { flex: 1; transition: transform 0.2s ease; }
+        .premade-palette:hover .premade-color { transform: scale(0.95); }
+        .premade-palette .premade-color:hover { transform: scale(1.1); }
+        
+        /* Estilos para página de Coleção de Marcas (Infográfico) */
+        #brands-infographic-container {
+            display: flex;
+            height: 100%;
+            width: 100%;
+            gap: 1rem;
+        }
+
+        #brand-selector-panel {
+            flex: 0 0 280px;
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 1.5rem;
+            padding: 1rem;
+            overflow-y: auto;
+        }
+        
+        #brand-selector-panel::-webkit-scrollbar { width: 4px; }
+        #brand-selector-panel::-webkit-scrollbar-thumb { background-color: rgba(255, 255, 255, 0.2); border-radius: 10px; }
+
+        .brand-selector-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+        }
+
+        .brand-logo-item {
+            background-color: rgba(255,255,255,0.05);
+            border-radius: 1rem;
+            padding: 0.5rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            aspect-ratio: 1 / 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .brand-logo-item:hover, .brand-logo-item.active {
+            background-color: rgba(255,255,255,0.15);
+            transform: scale(1.05);
+        }
+        .brand-logo-item svg {
+            width: 70%;
+            height: 70%;
+            fill: var(--text-muted-color);
+            transition: fill 0.2s ease;
+        }
+        .brand-logo-item.active svg, .brand-logo-item:hover svg {
+            fill: var(--text-color);
+        }
+
+        #brand-display-panel {
+            flex-grow: 1;
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            text-align: center;
+        }
+        
+        #brand-display-logo {
+            width: 150px;
+            height: 150px;
+            margin-bottom: 2rem;
+        }
+        #brand-display-logo svg {
+            width: 100%;
+            height: 100%;
+            fill: var(--text-color);
+            filter: drop-shadow(0 5px 15px rgba(0,0,0,0.3));
+        }
+
+        #brand-display-palette {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .brand-display-color {
+            width: 80px;
+            height: 120px;
+            border-radius: 1rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            flex-direction: column-reverse;
+            padding: 0.5rem;
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: rgba(255,255,255,0.8);
+        }
+        .brand-display-color:hover {
+            transform: translateY(-10px) scale(1.05);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        }
+
+        /* Tooltip e Notificação */
+        .tooltip, .copy-notification { position: fixed; background-color: rgba(0, 0, 0, 0.85); color: white; padding: 8px 12px; border-radius: 8px; font-size: 0.9em; pointer-events: none; opacity: 0; transition: opacity 0.2s; z-index: 1000; backdrop-filter: blur(5px); }
+        .copy-notification { top: 50%; left: 50%; transform: translate(-50%, -50%); font-weight: 500; }
+        .copy-notification.show { opacity: 1; transform: translate(-50%, -60%); }
+        
+        /* Responsividade */
+        @media (max-width: 992px) {
+            #generator-page .bento-grid #pastel-section, #generator-page .bento-grid #dark-section, #generator-page .bento-grid #neon-section { grid-column: span 6; }
+            .premade-palette-box { grid-column: span 12; }
+            #brands-infographic-container { flex-direction: column; }
+            #brand-selector-panel { flex: 0 0 auto; }
+            .brand-selector-grid { grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); }
+        }
+        @media (max-width: 768px) {
+            body { padding-top: 5rem; overflow: auto; }
+            .page { height: auto; }
+            #mouse-pointer-glow, #background-glow { display: none; }
+            .bento-box { padding: 1rem; }
+            .page-header h1 { font-size: 2rem; }
+            .picker-container { flex-direction: column; }
+            #color-canvas { height: 150px; }
+            #generator-page .bento-grid #pastel-section, #generator-page .bento-grid #dark-section, #generator-page .bento-grid #neon-section { grid-column: span 12; }
+        }
+    </style>
+</head>
+<body>
+    <div id="background-glow"></div>
+    <div id="mouse-pointer-glow"></div>
+
+    <nav class="top-nav">
+        <button class="nav-btn active" data-page="generator-page">Início</button>
+        <button class="nav-btn" data-page="suggestions-page">Sugestões de Paletas</button>
+        <button class="nav-btn" data-page="brands-page">Coleção de Marcas</button>
+    </nav>
+
+    <main id="generator-page" class="page active">
+        <div class="bento-grid">
+            <header class="bento-box page-header">
+                <h1>Gerador de Paletas de Cores</h1>
+                <p>Clique no seletor para escolher uma cor base e explore harmonias incríveis.</p>
+            </header>
+            <div id="picker-box" class="bento-box">
+                <div class="picker-container">
+                    <canvas id="color-canvas"></canvas>
+                    <div class="color-preview-wrapper">
+                        <div id="color-preview"></div>
+                        <span id="color-value">#BB86FC</span>
+                    </div>
+                </div>
+            </div>
+            <section class="bento-box" id="harmonizing-section">
+                <div class="palette-header"><h2>Harmônicas</h2><div class="action-buttons"><button class="action-btn" data-action="copy-css" data-target="harmonizing-palette">Copiar CSS</button><button class="action-btn" data-action="copy-html" data-target="harmonizing-palette">Copiar HTML</button><button class="action-btn" data-action="download" data-target="harmonizing-palette">Baixar</button></div></div>
+                <div class="palette" id="harmonizing-palette"></div>
+            </section>
+            <section class="bento-box" id="gradient-section">
+                <div class="palette-header"><h2>Degradê</h2><div class="action-buttons"><button class="action-btn" data-action="copy-css" data-target="gradient-palette-display">Copiar CSS</button><button class="action-btn" data-action="download" data-target="gradient-palette-display">Baixar</button></div></div>
+                <div id="gradient-palette-display"></div>
+                <div class="gradient-suggestions-container"><button class="gradient-suggestion active" data-type="linear-90"></button><button class="gradient-suggestion" data-type="linear-45"></button><button class="gradient-suggestion" data-type="radial"></button><button class="gradient-suggestion" data-type="conic"></button></div>
+            </section>
+            <section class="bento-box" id="pastel-section">
+                <div class="palette-header"><h2>Pastéis</h2><div class="action-buttons"><button class="action-btn" data-action="copy-css" data-target="pastel-palette">Copiar CSS</button><button class="action-btn" data-action="copy-html" data-target="pastel-palette">Copiar HTML</button><button class="action-btn" data-action="download" data-target="pastel-palette">Baixar</button></div></div>
+                <div class="palette" id="pastel-palette"></div>
+            </section>
+            <section class="bento-box" id="dark-section">
+                <div class="palette-header"><h2>Escuras</h2><div class="action-buttons"><button class="action-btn" data-action="copy-css" data-target="dark-palette">Copiar CSS</button><button class="action-btn" data-action="copy-html" data-target="dark-palette">Copiar HTML</button><button class="action-btn" data-action="download" data-target="dark-palette">Baixar</button></div></div>
+                <div class="palette" id="dark-palette"></div>
+            </section>
+            <section class="bento-box" id="neon-section">
+                <div class="palette-header"><h2>Neon</h2><div class="action-buttons"><button class="action-btn" data-action="copy-css" data-target="neon-palette">Copiar CSS</button><button class="action-btn" data-action="copy-html" data-target="neon-palette">Copiar HTML</button><button class="action-btn" data-action="download" data-target="neon-palette">Baixar</button></div></div>
+                <div class="palette" id="neon-palette"></div>
+            </section>
+        </div>
+    </main>
+    
+    <main id="suggestions-page" class="page">
+        <div class="bento-grid" id="suggestions-grid">
+            <!-- Conteúdo será gerado pelo JavaScript -->
+        </div>
+    </main>
+
+    <main id="brands-page" class="page">
+        <div id="brands-infographic-container">
+            <div id="brand-selector-panel">
+                <div class="brand-selector-grid">
+                    <!-- Logos das marcas serão inseridos aqui -->
+                </div>
+            </div>
+            <div id="brand-display-panel">
+                <div id="brand-display-logo">
+                    <!-- Logo da marca selecionada -->
+                </div>
+                <div id="brand-display-palette">
+                    <!-- Paleta da marca selecionada -->
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div class="tooltip"></div>
+    <div class="copy-notification">Copiado!</div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const root = document.documentElement;
+            const canvas = document.getElementById('color-canvas');
+            const ctx = canvas ? canvas.getContext('2d') : null;
+            const colorPreview = document.getElementById('color-preview');
+            const colorValue = document.getElementById('color-value');
+            const tooltip = document.querySelector('.tooltip');
+            const copyNotification = document.querySelector('.copy-notification');
+            const gradientDisplay = document.getElementById('gradient-palette-display');
+            const suggestionsContainer = document.querySelector('.gradient-suggestions-container');
+            const mousePointerGlow = document.getElementById('mouse-pointer-glow');
+            const navButtons = document.querySelectorAll('.nav-btn');
+            const pages = document.querySelectorAll('.page');
+            
+            let baseColor = '#bb86fc';
+            let currentGradientType = 'linear-90';
+
+            // --- FUNÇÕES DE CONVERSÃO E GERAÇÃO DE COR (minificadas) ---
+            function hexToRgb(h){let r=0,g=0,b=0;if(h.length==4){r="0x"+h[1]+h[1];g="0x"+h[2]+h[2];b="0x"+h[3]+h[3]}else if(h.length==7){r="0x"+h[1]+h[2];g="0x"+h[3]+h[4];b="0x"+h[5]+h[6]}return{r:+r,g:+g,b:+b}}
+            function rgbToHsl(r,g,b){r/=255,g/=255,b/=255;let max=Math.max(r,g,b),min=Math.min(r,g,b);let h,s,l=(max+min)/2;if(max==min)h=s=0;else{let d=max-min;s=l>0.5?d/(2-max-min):d/(max+min);switch(max){case r:h=(g-b)/d+(g<b?6:0);break;case g:h=(b-r)/d+2;break;case b:h=(r-g)/d+4;break}h/=6}return{h:h*360,s:s*100,l:l*100}}
+            function hslToRgb(h,s,l){s/=100,l/=100;let c=(1-Math.abs(2*l-1))*s,x=c*(1-Math.abs(h/60%2-1)),m=l-c/2,r=0,g=0,b=0;if(0<=h&&h<60)r=c,g=x,b=0;else if(60<=h&&h<120)r=x,g=c,b=0;else if(120<=h&&h<180)r=0,g=c,b=x;else if(180<=h&&h<240)r=0,g=x,b=c;else if(240<=h&&h<300)r=x,g=0,b=c;else if(300<=h&&h<360)r=c,g=0,b=x;r=Math.round((r+m)*255),g=Math.round((g+m)*255),b=Math.round((b+m)*255);return{r,g,b}}
+            function rgbToHex(r,g,b){return"#"+((1<<24)+(r<<16)+(g<<8)+b).toString(16).slice(1).toUpperCase()}
+            function generatePalette(c,t){const o=hexToRgb(c),e=rgbToHsl(o.r,o.g,o.b),a=[c];for(let l=1;l<5;l++){let n={...e};switch(t){case"harmonizing":n.h=(e.h+30*l)%360,l>2&&(n.h=(e.h+150+60*(l-3))%360);break;case"pastel":n.h=(e.h+20*l)%360,n.s=40+20*Math.random(),n.l=85+10*Math.random();break;case"dark":n.h=(e.h+15*l)%360,n.s=Math.max(30,e.s-20),n.l=15+5*l;break;case"neon":n.h=(e.h+60*l)%360,n.s=100,n.l=50}const s=hslToRgb(n.h,n.s,n.l);a.push(rgbToHex(s.r,s.g,s.b))}return a}
+
+            // --- CANVAS COLOR PICKER ---
+            function drawColorCanvas(){if(!canvas)return;canvas.width=canvas.clientWidth;canvas.height=canvas.clientHeight;let g=ctx.createLinearGradient(0,0,canvas.width,0);g.addColorStop(0,"hsl(0, 100%, 50%)"),g.addColorStop(.17,"hsl(60, 100%, 50%)"),g.addColorStop(.33,"hsl(120, 100%, 50%)"),g.addColorStop(.5,"hsl(180, 100%, 50%)"),g.addColorStop(.67,"hsl(240, 100%, 50%)"),g.addColorStop(.83,"hsl(300, 100%, 50%)"),g.addColorStop(1,"hsl(360, 100%, 50%)"),ctx.fillStyle=g,ctx.fillRect(0,0,canvas.width,canvas.height);let h=ctx.createLinearGradient(0,0,0,canvas.height);h.addColorStop(0,"rgba(255,255,255,1)"),h.addColorStop(.5,"rgba(255,255,255,0)"),h.addColorStop(.5,"rgba(0,0,0,0)"),h.addColorStop(1,"rgba(0,0,0,1)"),ctx.fillStyle=h,ctx.fillRect(0,0,canvas.width,canvas.height)}
+            function pickColor(e){const t=canvas.getBoundingClientRect(),o=e.clientX-t.left,a=e.clientY-t.top,l=ctx.getImageData(o,a,1,1).data;baseColor=rgbToHex(l[0],l[1],l[2]),updateUI(baseColor)}
+            if(canvas) canvas.addEventListener("click",pickColor);
+
+            // --- FUNÇÕES DE UI E GERAÇÃO DE CÓDIGO ---
+            function getGradientCss(t,o){const e=o.join(", ");switch(t){case"linear-45":return`linear-gradient(45deg, ${e})`;case"radial":return`radial-gradient(circle, ${e})`;case"conic":return`conic-gradient(from 180deg, ${e})`;case"linear-90":default:return`linear-gradient(90deg, ${e})`}}
+            function updateGradient(t){if(!gradientDisplay)return;const o=getGradientCss(currentGradientType,t);gradientDisplay.style.background=o,suggestionsContainer.querySelectorAll(".gradient-suggestion").forEach(e=>{const o=e.dataset.type;e.style.background=getGradientCss(o,t)})}
+            function generateGlowColor(t){const o=rgbToHsl(hexToRgb(t).r,hexToRgb(t).g,hexToRgb(t).b);return`hsla(${o.h}, ${.8*o.s}%, ${.3*o.l}%, 0.25)`}
+            function updateUI(t){if(!colorPreview)return;colorPreview.style.backgroundColor=t,colorValue.textContent=t,root.style.setProperty("--glow-color",generateGlowColor(t));const o={"harmonizing-palette":generatePalette(t,"harmonizing"),"pastel-palette":generatePalette(t,"pastel"),"dark-palette":generatePalette(t,"dark"),"neon-palette":generatePalette(t,"neon")};for(const e in o){const a=document.getElementById(e);if(a){a.innerHTML="";o[e].forEach(l=>{const n=document.createElement("div");n.className="color-box";const s=document.createElement("div");s.className="color-box-inner",s.style.backgroundColor=l,s.dataset.color=l,n.appendChild(s),a.appendChild(n)})}}updateGradient(o["harmonizing-palette"])}
+            function generateCssCode(t){if("gradient-palette-display"===t)return`background: ${gradientDisplay.style.background};`;const o=Array.from(document.querySelectorAll(`#${t} .color-box-inner`)).map(e=>e.dataset.color);let e=":root {\n";return o.forEach((o,a)=>{e+=`  --color-${a+1}: ${o};\n`}),e+="}",e}
+            function generateHtmlCode(t){const o=Array.from(document.querySelectorAll(`#${t} .color-box-inner`)).map(e=>e.dataset.color);let e='<div class="palette-container">\n';return o.forEach(o=>{e+=`  <div style="background-color: ${o}; width: 100px; height: 100px;"></div>\n`}),e+="</div>",e}
+            function showCopyNotification(){copyNotification.classList.add("show"),setTimeout(()=>copyNotification.classList.remove("show"),1500)}
+
+            // --- NAVEGAÇÃO ---
+            function showPage(pageId) {
+                pages.forEach(p => p.classList.remove('active'));
+                navButtons.forEach(b => b.classList.remove('active'));
+                document.getElementById(pageId).classList.add('active');
+                document.querySelector(`.nav-btn[data-page="${pageId}"]`).classList.add('active');
+            }
+            navButtons.forEach(button => {
+                button.addEventListener('click', () => showPage(button.dataset.page));
+            });
+
+            // --- MANIPULADORES DE EVENTOS ---
+            if(suggestionsContainer) suggestionsContainer.addEventListener("click",e=>{if(e.target.classList.contains("gradient-suggestion")){currentGradientType=e.target.dataset.type,suggestionsContainer.querySelector(".active").classList.remove("active"),e.target.classList.add("active");const t=Array.from(document.querySelectorAll("#harmonizing-palette .color-box-inner")).map(o=>o.dataset.color);updateGradient(t)}});
+            document.body.addEventListener("mouseover",e=>{
+                let target = e.target;
+                let text = '';
+                if(target.classList.contains("color-box-inner") || target.classList.contains("premade-color") || target.classList.contains("brand-display-color")) {
+                    text = target.style.backgroundColor;
+                } else {
+                    const brandItem = target.closest('.brand-logo-item');
+                    if (brandItem) {
+                        text = brandItem.dataset.brandName;
+                    }
+                }
+                if (text) {
+                    tooltip.textContent = text;
+                    tooltip.style.opacity="1";
+                }
+            });
+            document.body.addEventListener("mousemove",e=>{tooltip.style.left=`${e.clientX+15}px`,tooltip.style.top=`${e.clientY+15}px`});
+            document.body.addEventListener("mouseout",e=>{tooltip.style.opacity="0"});
+            document.body.addEventListener("click",e=>{if(e.target.classList.contains("color-box-inner") || e.target.classList.contains("premade-color") || e.target.classList.contains("brand-display-color"))navigator.clipboard.writeText(e.target.style.backgroundColor).then(showCopyNotification).catch(t=>console.error("Falha ao copiar a cor: ",t))});
+            document.querySelectorAll(".action-btn").forEach(t=>{t.addEventListener("click",o=>{o.stopPropagation();const e=t.dataset.action,a=t.dataset.target;if("download"===e){const l=document.getElementById(a);html2canvas(l,{backgroundColor:null,scale:3}).then(n=>{const s=document.createElement("a");s.download=`${a}.png`,s.href=n.toDataURL("image/png"),s.click()})}else if("copy-css"===e){const c=generateCssCode(a);navigator.clipboard.writeText(c).then(showCopyNotification).catch(d=>console.error("Falha ao copiar CSS: ",d))}else if("copy-html"===e){const r=generateHtmlCode(a);navigator.clipboard.writeText(r).then(showCopyNotification).catch(i=>console.error("Falha ao copiar HTML: ",i))}})});
+            window.addEventListener("mousemove",e=>{if(mousePointerGlow){mousePointerGlow.style.left=`${e.clientX}px`;mousePointerGlow.style.top=`${e.clientY}px`}});
+            
+            // --- INICIALIZAÇÃO E CONTEÚDO ESTÁTICO ---
+            function renderContent() {
+                renderSuggestions();
+                renderBrandsInfographic();
+            }
+
+            function renderSuggestions() {
+                const suggestionsData = {
+                    "Natureza": [ { name: "Floresta Amazônica", colors: ["#003840", "#005A5B", "#007369", "#008C72", "#02A676"] }, { name: "Pôr do Sol na Savana", colors: ["#FAD02E", "#F79F1F", "#F26B38", "#E84A5F", "#BF3A30"] }, { name: "Aurora Boreal", colors: ["#00A8A8", "#007A7A", "#004D4D", "#002626", "#B4EDD2"] }, { name: "Cânion Rochoso", colors: ["#A0522D", "#CD853F", "#D2691E", "#8B4513", "#F4A460"] }, { name: "Recife de Coral", colors: ["#FF6F61", "#FFD166", "#06D6A0", "#118AB2", "#073B4C"] }, { name: "Campos de Lavanda", colors: ["#E6E6FA", "#D8BFD8", "#DDA0DD", "#BA55D3", "#9932CC"] }, { name: "Geleira Polar", colors: ["#F0F8FF", "#ADD8E6", "#87CEEB", "#4682B4", "#000080"] }, { name: "Outono Dourado", colors: ["#DAA520", "#B8860B", "#CD853F", "#D2691E", "#8B4513"] }, { name: "Praia Tropical", colors: ["#00BFFF", "#40E0D0", "#FFD700", "#FFA500", "#FF4500"] }, { name: "Noite Estrelada", colors: ["#000033", "#000066", "#00008B", "#4B0082", "#FFFFFF"] }, { name: "Vulcão em Erupção", colors: ["#FF4500", "#FF6347", "#DC143C", "#8B0000", "#000000"] }, { name: "Lagoa Esmeralda", colors: ["#2E8B57", "#3CB371", "#66CDAA", "#20B2AA", "#008080"] }, { name: "Deserto de Areia", colors: ["#F5DEB3", "#DEB887", "#D2B48C", "#BC8F8F", "#CD853F"] }, { name: "Caverna de Cristal", colors: ["#483D8B", "#6A5ACD", "#7B68EE", "#9370DB", "#E6E6FA"] }, { name: "Montanhas Nevadas", colors: ["#FFFFFF", "#F5F5F5", "#DCDCDC", "#C0C0C0", "#A9A9A9"] } ],
+                    "Cidade": [ { name: "Metrópole Noturna", colors: ["#191970", "#000080", "#483D8B", "#FFD700", "#FFFFFF"] }, { name: "Grafite Urbano", colors: ["#FF4500", "#FFD700", "#32CD32", "#1E90FF", "#8A2BE2"] }, { name: "Café Aconchegante", colors: ["#6F4E37", "#8B4513", "#D2691E", "#F5DEB3", "#FFFFFF"] }, { name: "Luzes de Neon", colors: ["#FF00FF", "#00FFFF", "#FFFF00", "#FF4500", "#000000"] }, { name: "Parque Central", colors: ["#228B22", "#008000", "#32CD32", "#ADFF2F", "#F5F5DC"] }, { name: "Biblioteca Antiga", colors: ["#8B4513", "#A0522D", "#D2691E", "#DEB887", "#F5F5DC"] }, { name: "Estação de Metrô", colors: ["#696969", "#808080", "#A9A9A9", "#C0C0C0", "#DCDCDC"] }, { name: "Arranha-céu de Vidro", colors: ["#00BFFF", "#1E90FF", "#4682B4", "#B0C4DE", "#F0F8FF"] }, { name: "Mercado de Rua", colors: ["#FF6347", "#FFD700", "#32CD32", "#4682B4", "#8A2BE2"] }, { name: "Manhã Cinzenta", colors: ["#708090", "#778899", "#B0C4DE", "#E6E6FA", "#FFFFFF"] } ],
+                    "Universo": [ { name: "Nebulosa de Orion", colors: ["#4B0082", "#8A2BE2", "#9400D3", "#FF00FF", "#FF69B4"] }, { name: "Supernova", colors: ["#FFFF00", "#FFD700", "#FFA500", "#FF4500", "#FF0000"] }, { name: "Galáxia de Andrômeda", colors: ["#00008B", "#191970", "#483D8B", "#6A5ACD", "#E6E6FA"] }, { name: "Buraco Negro", colors: ["#000000", "#1C1C1C", "#363636", "#4F4F4F", "#696969"] }, { name: "Poeira Cósmica", colors: ["#BDB76B", "#F0E68C", "#EEE8AA", "#FAFAD2", "#FFFFF0"] }, { name: "Planeta Vermelho", colors: ["#B22222", "#A52A2A", "#CD5C5C", "#F08080", "#E9967A"] }, { name: "Anéis de Saturno", colors: ["#F5DEB3", "#DEB887", "#D2B48C", "#BC8F8F", "#8B4513"] }, { name: "Cometa Halley", colors: ["#ADD8E6", "#B0E0E6", "#AFEEEE", "#00CED1", "#48D1CC"] }, { name: "Estrela Anã Branca", colors: ["#FFFFFF", "#F5F5F5", "#F8F8FF", "#F0FFFF", "#E6E6FA"] }, { name: "Cinturão de Asteroides", colors: ["#808080", "#A9A9A9", "#C0C0C0", "#D3D3D3", "#DCDCDC"] } ],
+                    "Cartoon": [ { name: "Aventura Clássica", colors: ["#FFD700", "#FF4500", "#1E90FF", "#32CD32", "#FFFFFF"] }, { name: "Vilão Cômico", colors: ["#8A2BE2", "#32CD32", "#FFD700", "#FF4500", "#000000"] }, { name: "Princesa Encantada", colors: ["#FFC0CB", "#FFB6C1", "#FF69B4", "#DB7093", "#C71585"] }, { name: "Robô Futurista", colors: ["#C0C0C0", "#D3D3D3", "#A9A9A9", "#00BFFF", "#1E90FF"] }, { name: "Monstro Amigável", colors: ["#32CD32", "#ADFF2F", "#7CFC00", "#008000", "#228B22"] }, { name: "Cidade Subaquática", colors: ["#00FFFF", "#40E0D0", "#48D1CC", "#20B2AA", "#008B8B"] }, { name: "Corrida Maluca", colors: ["#FF0000", "#FFFF00", "#0000FF", "#00FF00", "#FF00FF"] }, { name: "Doce Reino", colors: ["#FFB6C1", "#87CEFA", "#98FB98", "#F0E68C", "#DDA0DD"] }, { name: "Super-herói", colors: ["#FF0000", "#0000FF", "#FFFF00", "#000000", "#FFFFFF"] }, { name: "Fantasma Brincalhão", colors: ["#E6E6FA", "#FFFFFF", "#F8F8FF", "#F0F8FF", "#ADD8E6"] } ],
+                    "Esporte": [ { name: "Quadra de Tênis", colors: ["#008000", "#FFFF00", "#FFFFFF", "#A9A9A9", "#000000"] }, { name: "Piscina Olímpica", colors: ["#00BFFF", "#1E90FF", "#4169E1", "#0000CD", "#FFFFFF"] }, { name: "Campo de Futebol", colors: ["#006400", "#228B22", "#32CD32", "#FFFFFF", "#000000"] }, { name: "Basquete de Rua", colors: ["#FFA500", "#FF4500", "#8B0000", "#000000", "#696969"] }, { name: "Pista de Corrida", colors: ["#FF0000", "#FFFF00", "#000000", "#FFFFFF", "#C0C0C0"] }, { name: "Golfe", colors: ["#008000", "#3CB371", "#F5F5F5", "#FFFFFF", "#ADD8E6"] }, { name: "Vôlei de Praia", colors: ["#FFD700", "#F0E68C", "#00BFFF", "#FFFFFF", "#DEB887"] }, { name: "Beisebol", colors: ["#FF0000", "#000080", "#FFFFFF", "#8B4513", "#F5F5DC"] }, { name: "Fórmula 1", colors: ["#FF0000", "#000000", "#FFFFFF", "#C0C0C0", "#FFFF00"] }, { name: "Ciclismo", colors: ["#FFFF00", "#000000", "#1E90FF", "#FF0000", "#32CD32"] } ],
+                    "Comida e bebidas": [ { name: "Salada de Frutas", colors: ["#FF4500", "#FFD700", "#32CD32", "#FF69B4", "#8A2BE2"] }, { name: "Café com Leite", colors: ["#6F4E37", "#8B4513", "#D2691E", "#F5DEB3", "#FFFFFF"] }, { name: "Sorvete de Morango", colors: ["#FFC0CB", "#FFB6C1", "#FF69B4", "#DB7093", "#FFFFFF"] }, { name: "Pizza Margherita", colors: ["#FF0000", "#FFFFFF", "#32CD32", "#F5DEB3", "#FFD700"] }, { name: "Sushi", colors: ["#FF4500", "#FFFFFF", "#000000", "#32CD32", "#FFC0CB"] }, { name: "Vinho Tinto", colors: ["#8B0000", "#A52A2A", "#B22222", "#DC143C", "#C71585"] }, { name: "Chocolate Amargo", colors: ["#5C2C2C", "#3E1F1F", "#1F0F0F", "#8B4513", "#D2691E"] }, { name: "Limonada Refrescante", colors: ["#ADFF2F", "#7FFF00", "#FFFF00", "#F0E68C", "#FFFFFF"] }, { name: "Muffin de Blueberry", colors: ["#483D8B", "#6A5ACD", "#DDA0DD", "#F5DEB3", "#FFFFFF"] }, { name: "Chá Verde", colors: ["#6B8E23", "#808000", "#556B2F", "#ADFF2F", "#F5F5DC"] } ]
+                };
+                const suggestionsGrid = document.getElementById('suggestions-grid');
+                if(!suggestionsGrid) return;
+                suggestionsGrid.innerHTML = `<div class="page-header"><h1>Sugestões de Paletas</h1></div>`;
+                Object.entries(suggestionsData).forEach(([category, palettes]) => {
+                    suggestionsGrid.innerHTML += `<div class="category-header"><h2>${category}</h2></div>`;
+                    palettes.forEach(palette => {
+                        suggestionsGrid.innerHTML += createPremadePaletteHTML(palette.name, palette.colors);
+                    });
+                });
+            }
+
+            function createPremadePaletteHTML(name, colors) {
+                let colorsHTML = colors.map(c => `<div class="premade-color" style="background-color: ${c}" title="${c}"></div>`).join('');
+                return `
+                    <div class="bento-box premade-palette-box">
+                        <div class="palette-header"><h2>${name}</h2></div>
+                        <div class="premade-palette">${colorsHTML}</div>
+                    </div>
+                `;
+            }
+            
+            function renderBrandsInfographic() {
+                const brandsData = [
+                    { name: 'Google', slug: 'google', colors: ['#4285F4', '#34A853', '#FBBC05', '#EA4335'] },
+                    { name: 'Spotify', slug: 'spotify', colors: ['#1DB954', '#191414', '#FFFFFF'] },
+                    { name: 'Netflix', slug: 'netflix', colors: ['#E50914', '#000000', '#FFFFFF'] },
+                    { name: 'Instagram', slug: 'instagram', colors: ['#405DE6', '#833AB4', '#E1306C', '#FCAF45'] },
+                    { name: 'Microsoft', slug: 'microsoft', colors: ['#F25022', '#7FBA00', '#00A4EF', '#FFB900'] },
+                    { name: 'Amazon', slug: 'amazon', colors: ['#FF9900', '#000000', '#FFFFFF'] },
+                    { name: 'Coca-Cola', slug: 'cocacola', colors: ['#F40009', '#FFFFFF'] },
+                    { name: 'TikTok', slug: 'tiktok', colors: ['#000000', '#FFFFFF', '#FE2C55', '#25F4EE'] },
+                    { name: 'McDonald\'s', slug: 'mcdonalds', colors: ['#FFC72C', '#DA291C', '#000000'] },
+                    { name: 'Pepsi', slug: 'pepsi', colors: ['#00529C', '#D52B1E', '#FFFFFF'] },
+                    { name: 'Apple', slug: 'apple', colors: ['#000000', '#FFFFFF', '#A2AAAD'] },
+                    { name: 'Facebook', slug: 'facebook', colors: ['#1877F2', '#FFFFFF'] },
+                    { name: 'X (Twitter)', slug: 'x', colors: ['#000000', '#FFFFFF'] },
+                    { name: 'Slack', slug: 'slack', colors: ['#4A154B', '#36C5F0', '#2EB67D', '#ECB22E', '#E01E5A'] },
+                    { name: 'FedEx', slug: 'fedex', colors: ['#4D148C', '#FF6600'] },
+                    { name: 'IKEA', slug: 'ikea', colors: ['#0051BA', '#FFDA1A', '#FFFFFF'] },
+                    { name: 'Starbucks', slug: 'starbucks', colors: ['#00704A', '#FFFFFF', '#000000'] },
+                    { name: 'Mastercard', slug: 'mastercard', colors: ['#EB001B', '#F79E1B', '#FF5F00'] },
+                    { name: 'Visa', slug: 'visa', colors: ['#1A1F71', '#F7B600'] },
+                    { name: 'Discord', slug: 'discord', colors: ['#5865F2', '#FFFFFF'] },
+                    { name: 'Adobe', slug: 'adobe', colors: ['#FF0000', '#000000', '#FFFFFF'] },
+                    { name: 'Airbnb', slug: 'airbnb', colors: ['#FF5A5F', '#00A699', '#FC642D', '#484848'] },
+                    { name: 'Burger King', slug: 'burgerking', colors: ['#D62828', '#F77F00', '#003049', '#FCBF49'] },
+                    { name: 'Canon', slug: 'canon', colors: ['#E60000', '#000000', '#FFFFFF'] },
+                    { name: 'Dropbox', slug: 'dropbox', colors: ['#0061FF', '#FFFFFF'] },
+                    { name: 'Ebay', slug: 'ebay', colors: ['#E53238', '#0064D3', '#F5AF02', '#86B817'] },
+                    { name: 'Intel', slug: 'intel', colors: ['#0071C5', '#FFFFFF'] },
+                    { name: 'Lego', slug: 'lego', colors: ['#D9000D', '#FFD700', '#005F9B', '#237841'] },
+                    { name: 'LinkedIn', slug: 'linkedin', colors: ['#0A66C2', '#FFFFFF'] },
+                    { name: 'Nintendo', slug: 'nintendo', colors: ['#E60012', '#FFFFFF'] },
+                    { name: 'PayPal', slug: 'paypal', colors: ['#003087', '#009CDE', '#005EA6'] },
+                    { name: 'Pinterest', slug: 'pinterest', colors: ['#E60023', '#FFFFFF'] },
+                    { name: 'Red Bull', slug: 'redbull', colors: ['#D9000D', '#FFD700', '#005F9B'] },
+                    { name: 'Samsung', slug: 'samsung', colors: ['#0057B7', '#FFFFFF'] },
+                    { name: 'SoundCloud', slug: 'soundcloud', colors: ['#FF5500', '#FFFFFF', '#000000'] },
+                    { name: 'Tesla', slug: 'tesla', colors: ['#CC0000', '#000000', '#FFFFFF'] },
+                    { name: 'Uber', slug: 'uber', colors: ['#000000', '#FFFFFF'] },
+                    { name: 'YouTube', slug: 'youtube', colors: ['#FF0000', '#282828', '#FFFFFF'] },
+                    { name: 'WordPress', slug: 'wordpress', colors: ['#21759B', '#D54E21', '#464646', '#FFFFFF'] },
+                    { name: 'Adidas', slug: 'adidas', colors: ['#000000', '#FFFFFF'] }
+                ];
+                
+                const selectorGrid = document.querySelector('.brand-selector-grid');
+                const displayLogo = document.getElementById('brand-display-logo');
+                const displayPalette = document.getElementById('brand-display-palette');
+                if(!selectorGrid) return;
+
+                selectorGrid.innerHTML = '';
+
+                brandsData.forEach(brand => {
+                    const logoItem = document.createElement('div');
+                    logoItem.className = 'brand-logo-item';
+                    logoItem.dataset.brandName = brand.name;
+                    
+                    fetch(`https://cdn.jsdelivr.net/npm/simple-icons/icons/${brand.slug}.svg`)
+                        .then(response => response.ok ? response.text() : Promise.reject())
+                        .then(svgText => { logoItem.innerHTML = svgText; })
+                        .catch(() => { logoItem.innerHTML = `<span style="font-weight:bold;">${brand.name.charAt(0)}</span>`; });
+
+                    logoItem.addEventListener('click', () => updateBrandDisplay(brand.name));
+                    selectorGrid.appendChild(logoItem);
+                });
+
+                function updateBrandDisplay(brandName) {
+                    const brand = brandsData.find(b => b.name === brandName);
+                    if (!brand) return;
+                    
+                    document.querySelectorAll('.brand-logo-item').forEach(item => {
+                        item.classList.toggle('active', item.dataset.brandName === brandName);
+                    });
+
+                    fetch(`https://cdn.jsdelivr.net/npm/simple-icons/icons/${brand.slug}.svg`)
+                        .then(response => response.ok ? response.text() : Promise.reject())
+                        .then(svgText => { displayLogo.innerHTML = svgText; })
+                        .catch(() => { displayLogo.innerHTML = `<h2 style="font-size: 3rem;">${brand.name}</h2>`; });
+
+                    displayPalette.innerHTML = '';
+                    brand.colors.forEach(color => {
+                        const colorEl = document.createElement('div');
+                        colorEl.className = 'brand-display-color';
+                        colorEl.style.backgroundColor = color;
+                        
+                        // Define a cor do texto (código HEX) com base na luminosidade da cor de fundo
+                        const rgb = hexToRgb(color);
+                        const luminance = (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255;
+                        colorEl.style.color = luminance > 0.5 ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.8)';
+
+                        colorEl.innerHTML = `<span>${color}</span>`;
+                        displayPalette.appendChild(colorEl);
+                    });
+                    
+                    root.style.setProperty('--glow-color', generateGlowColor(brand.colors[0]));
+                }
+                
+                // Exibe a primeira marca por padrão
+                updateBrandDisplay(brandsData[0].name);
+            }
+
+            // --- INICIALIZAÇÃO ---
+            drawColorCanvas();
+            if(document.getElementById('generator-page').classList.contains('active')) {
+                updateUI(baseColor);
+            }
+            renderContent();
+            window.addEventListener("resize",drawColorCanvas);
+        });
+    </script>
+</body>
+</html>
